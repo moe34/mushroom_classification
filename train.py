@@ -10,6 +10,7 @@ import torch.optim as optim
 from torchvision import transforms
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 def remove_glob(pathname, recursive=True):
     for p in glob.glob(pathname, recursive=recursive):      
@@ -62,7 +63,8 @@ class mushroomDataset(data.Dataset):
     
     def __getitem__(self, index):
         img_path = self.file_list[index]
-        img = Image.open(img_path)
+        img = Image.open(img_path).convert("RGB")
+        
         img_transformed = self.transform(img, self.phase)
         label = self.file_list[index].split('/')[1]
         label = self.classes.index(label) #convert label name to number
@@ -153,6 +155,10 @@ if __name__ == "__main__":
             epoch_loss = 0.0
             #正解数
             epoch_corrects = 0
+            best_acc = 0.0
+
+            epoch_loss_list = []
+            epoch_accuracy_list = []
 
             for inputs, labels in dataloaders_dict[phase]:
                 #optimizerの初期化
@@ -172,7 +178,21 @@ if __name__ == "__main__":
                     epoch_corrects += torch.sum(preds==labels.data)
             epoch_loss = epoch_loss /len(dataloaders_dict[phase].dataset)
             epoch_acc = epoch_corrects.double() / len(dataloaders_dict[phase].dataset)
-
+            epoch_loss_list.append(epoch_loss)
+            epoch_accuracy_list.append(epoch_acc)
+            if phase =="train":
+                if epoch_acc > best_acc:
+                    torch.save(net.state_dict(), "best.pth")
+                    best_acc = epoch_acc
             print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
+        
+    fig, ax = plt.subplots()  
+    ax.set_xlabel("Epoch")
+    epoch_list = np.linspace(1,num_epochs, 1)
+    ax.plot(epoch_list, epoch_loss_list, color="blue", label="loss")
+    ax.plot(epoch_list, epoch_accuracy_list, color="orange", label="accuracy")
+    ax.legend()
+    plt.savefig("result.png")
+    plt.show()
 
 
