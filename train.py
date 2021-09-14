@@ -68,7 +68,7 @@ class mushroomDataset(data.Dataset):
         label = self.classes.index(label) #convert label name to number
 
         return img_transformed, label
-
+#conv1 relu(活性化) pooling（画像サイズの縮小) conv2 fully connect
 class  Net(nn.Module):
     def __init__(self):
         #nn.Moduleの初期化関数を起動
@@ -77,15 +77,37 @@ class  Net(nn.Module):
         self.relu = nn.ReLU()
         #celi_mode=Trueにすると出力サイズを切り上げる
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0,ceil_mode=False)
+        
+        #convolutional network
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
+        
+        #fully connected layers
+        #fc1(input_features, hidden)
+        #fc2(hidden, output_features)
+        self.fc1 = nn.Linear(in_features=64*126*126, out_features=64)
+        self.fc2 = nn.Linear(64,2)
+        
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = self.pool(x)
+        # print("x.shape=",x.shape)
+        x = x.view(x.size(0), -1)
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        #分類問題なので活性化関数としてsoftmax関数を使用
+        x = F.softmax(x,dim=1)
 
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels, kernel_size=3)
-        self.conv2 = nn.Conv2d(in_channels, out_channels, kernel_size)
+        return x
 
-        self.
+
 
 
 
 if __name__ == "__main__":
+    toch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     remove_glob("dataset/.DS_Store")
     remove_glob("dataset/*/.DS_Store")
     train_file_list, valid_file_list = make_filepath_list("dataset/")
@@ -99,13 +121,58 @@ if __name__ == "__main__":
     print(train_file_list[0])
     print(train_dataset.__getitem__(index)[0].size())
     print(train_dataset.__getitem__(index)[1])
-    train_dataloader = data.DataLoader(train_dataset, batch_size=2, shuffle=True)
-    valid_dataloader = data.DataLoader(valid_dataset, batch_size = 2, shuffle=False)
+    train_dataloader = data.DataLoader(train_dataset, batch_size=4, shuffle=True)
+    valid_dataloader = data.DataLoader(valid_dataset, batch_size = 4, shuffle=False)
     dataloaders_dict = {
         "train" : train_dataloader,
         "valid" : valid_dataloader
     }
     batch_iterator = iter(dataloaders_dict["train"])
     inputs, labels = next(batch_iterator)
-    print(inputs.size())
+    print(inputs.size())#(torch.Size([batch_size, channel,height,width]))
     print(labels)
+    net = Net()
+    print(net)
+    #損失関数の定義
+    criterion = nn.CrossEntropyLoss()
+    #最適化手法の定義
+    optimizer=optim.SGD(net.parameters(), lr=0.01)
+
+    num_epochs = 30
+
+    for epoch in range(num_epochs):
+        print(("Epoch {}/{}").format(epoch+1, num_epochs))
+        print("-------------")
+        
+        for phase in ["train","valid"]:
+            if phase == "train":
+                net.train()
+            else:
+                net.eval()
+            #epochごとの損失和
+            epoch_loss = 0.0
+            #正解数
+            epoch_corrects = 0
+
+            for inputs, labels in dataloaders_dict[phase]:
+                #optimizerの初期化
+                optimizer.zero_grad()
+                with torch.set_grad_enabled(phase == "train"):
+                    outputs = net(inputs)
+                    loss = criterion(outputs, labels)
+                    _, preds = torch.max(outputs, axis=1)
+                    
+                    if phase == "train":
+                        #逆伝播の計算
+                        loss.backward()
+                        #パラメーターの更新
+                        optimizer.step()
+                
+                    epoch_loss += loss.item() * inputs.size(0)
+                    epoch_corrects += torch.sum(preds==labels.data)
+            epoch_loss = epoch_loss /len(dataloaders_dict[phase].dataset)
+            epoch_acc = epoch_corrects.double() / len(dataloaders_dict[phase].dataset)
+
+            print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
+
+
