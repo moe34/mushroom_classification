@@ -1,2 +1,2 @@
 # mushroom_classification
-classify tsukimidake and hiratake using deep learning
+classify tsukiyotake and hiratake using deep learning
